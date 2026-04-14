@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rscore"
+version = "0.1.0"
+description = "Responsiveness Scores: unit-level heterogeneous slope estimation via iterated random-coefficient regression."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Arianna Di Paola", email = "arianna.dipaola@cnr.it"},
+    {name = "Giovanni Cerulli", email = "giovanni.cerulli@cnr.it"},
+]
+keywords = [
+    "econometrics",
+    "heterogeneous coefficients",
+    "responsiveness scores",
+    "panel data",
+    "bootstrap inference",
+    "climate analysis",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "numpy>=1.22",
+    "pandas>=1.4",
+    "statsmodels>=0.13",
+    "matplotlib>=3.5",
+    "scipy>=1.8",
+    "scikit-learn>=1.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+
+]
+
+[project.urls]
+Repository = "https://github.com/YOUR_USERNAME/rscore"
+Documentation = "https://github.com/YOUR_USERNAME/rscore#readme"
+
+[tool.setuptools.packages.find]
+include = ["rscore*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
