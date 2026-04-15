@@ -22,29 +22,29 @@
 
 In ordinary regression, every unit shares the same slope — one number
 summarises the effect of predictor $x_j$ on outcome $y$ for *everyone*.
-But **what if each unit has its own slope?**
+But **what if each unit has its own slope due to compound effects from other variables?**
 
 Instead of estimating a single coefficient $\beta_j$,
 RScore lets $\beta_j$ vary across units as a linear function of each unit's
 observed values on the *other* predictors. Concretely, the method multiplies the
-focal predictor $x_j$ by every other predictor $x_k$ and add those
-products — called **interaction terms** — to the regression. The
+focal predictor $x_j$ by other predictors $x_k$ selected to interact with it,
+adding these products — called **interaction terms** — to the regression. The
 estimated coefficients on those interaction terms, combined with each
 unit's actual $x_k$ values, give every unit its own local slope.
 
 
 
 ```
-Standard regression           RScore
-──────────────────            ──────
-One slope for all    →        One slope per unit
-β_j = constant       →        RS_ij = f(unit i's context)
+Standard regression              RScore
+──────────────────               ──────
+One slope for all        →        One locally evaluated slope per unit
+β_j                      →        RS_ij = β_j + context-dependent adjustments
 ```
 
 ### What it produces
 
 For each (unit, predictor) pair, a **Responsiveness Score** (RS): the
-estimated slope of $y$ with respect to predictor $x_j$, evaluated at that
+slope of $y$ with respect to predictor $x_j$, evaluated at that
 unit's specific covariate values. Collected into a matrix of dimensions
 (n_observations × p_predictors), these scores reveal who responds
 strongly, who weakly, and — via the interaction coefficients — *why*.
@@ -67,36 +67,40 @@ All variables are standardised (mean 0, sd 1).
 
 **Standard regression** estimates a single slope:
 
-$$y_i = \alpha + 0.40 \cdot x_{i1} + \ldots$$
+$$y_i = \alpha + {\beta} \cdot x_{i1} + {\gamma}\cdot x_{i2}$$
 
-Every province gets the same answer: "40% more sd of winter temperature → +0.40 sd
+where ${\beta}$ and $\gamma$ are the slope of$x_1$ and $x_2$, respectively, namely the direct effect of winter temperature and temperature at harvest on yield.
+
+[//]: # (&#40;the latter  matters for the model fit but not for RS, because RS is the partial derivative of $y$ with respect to )
+
+[//]: # (winter temperature only.)
+
+Every province gets the same answer: "${\beta}$ more sd of winter temperature → +$ {\beta}$ sd
 of yield." Flat, uniform, uninformative about local differences.
 
 **RScore** adds the interaction $x_1 \times x_2$ to the regression and
 estimates:
 
-$$y_i = \alpha + \underbrace{0.40}_{\delta_0} \cdot x_{i1}
+
+$$y_i = \alpha + {\beta_0} \cdot x_{i1}
       + \gamma \cdot x_{i2}
-      + \underbrace{0.25}_{\delta_1} \cdot (x_{i1} \cdot x_{i2})
+      + {\beta_1} \cdot (x_{i1} \cdot x_{i2})
       + \varepsilon_i$$
 
-Note: $\gamma$ is the slope of $x_2$, namely the direct effect of temperature at harvest on yield — it matters for the model fit but not for RS, because RS is the partial derivative of $y$ with respect to 
-winter temperature only.
+Now, supposing ${\beta_0}=0.40$ and ${\beta_1}=0.25$, the slope of winter temperature *for unit $i$* is:
 
-Now the slope of winter temperature *for unit $i$* is:
-
-$$RS_{i,\text{win_temp}} = \delta_0 + \delta_1 \cdot x_{i2}
+$$RS_{i,\text{win_temp}} = \beta_0 + \beta_1 \cdot x_{i2}
                         = 0.40 + 0.25 \cdot x_{i,\text{temp}}$$
 
-| Province | Temperature ($x_{i2}$) | RS (precipitation slope) | Interpretation |
-|----------|------------------------|--------------------------|----------------|
-| A        | +1.2 (hot)             | 0.40 + 0.25 × 1.2 = **0.70** | Strong response |
-| B        | 0.0 (average)          | 0.40 + 0.25 × 0.0 = **0.40** | Average response |
-| C        | −0.8 (cool)            | 0.40 + 0.25 × (−0.8) = **0.20** | Weak response |
+| Province | Temperature at harvest($x_{i2}$) | RS                              | Interpretation   |
+|----------|----------------------------------|---------------------------------|------------------|
+| A        | +1.2 (hot)                       | 0.40 + 0.25 × 1.2 = **0.70**    | Strong response  |
+| B        | 0.0 (average)                    | 0.40 + 0.25 × 0.0 = **0.40**    | Average response |
+| C        | −0.8 (cool)                      | 0.40 + 0.25 × (−0.8) = **0.20** | Weak response    |
 
-Province A, being hotter, benefits more from warm winters. Province C,
-being cooler, barely responds. The *global* coefficients ($\delta_0 = 0.40$,
-$\delta_1 = 0.25$) are the same for everyone — what differs is each
+Province A benefits more from warm winters due to a positive interaction with harvest temperature. 
+Province C,being cooler, barely responds, despite the interaction exist and being positve. The *global* coefficients ($\beta_0 = 0.40$,
+$\beta_1 = 0.25$) are the same for everyone — what differs is each
 province's *temperature at harvest*, and that is what makes the slope local.
 
 This procedure is repeated for each predictor — one regression per
@@ -128,17 +132,17 @@ We allow the slope of $x_j$ to depend on the other predictors by adding
 of the other predictors $x_k$.
 
 $$y_i = \alpha
-      + \delta_0 \cdot x_{ij}
+      + \beta_j \cdot x_{ij}
       + \sum_{k \neq j} \gamma_k \cdot x_{ik}
-      + \sum_{k \neq j} \delta_k \cdot \underbrace{(x_{ij} \cdot x_{ik})}_{\text{interaction}}
+      + \sum_{k \neq j} \beta_k \cdot \underbrace{(x_{ij} \cdot x_{ik})}_{\text{interaction}}
       + \varepsilon_i$$
 
 where:
 
-- $\delta_0$ — **baseline slope** of $x_j$ on $y$, shared by all units
+- $\beta_j$ — **baseline slope** of $x_j$ on $y$, shared by all units
   (analogous to $\beta_j$ in standard regression)
 - $\gamma_k$ — direct effect of each other predictor $x_k$ on $y$
-- $\delta_k$ — **interaction coefficient**: how much predictor $x_k$
+- $\beta_k$ — **interaction coefficient**: how much predictor $x_k$
   modifies the slope of $x_j$. Estimated once on all data.
 - $(x_{ij} \cdot x_{ik})$ — interaction term: a new variable built by
   multiplying the focal predictor by each other predictor
@@ -149,9 +153,9 @@ The unit-specific slope of $x_j$ is obtained by taking the partial
 derivative of $y$ with respect to $x_j$:
 
 $$RS_{ij} = \frac{\partial y}{\partial x_j}\Bigg|_{\text{unit } i}
-          = \delta_0 + \sum_{k \neq j} \delta_k \cdot x_{ik}$$
+          = \beta_0 + \sum_{k \neq j} \beta_k \cdot x_{ik}$$
 
-- $\delta_0$ and $\delta_k$ are **global** — estimated once, identical
+- $\beta_0$ and $\beta_k$ are **global** — estimated once, identical
   for every unit
 - $x_{ik}$ is the **observed value** of predictor $k$ for unit $i$ —
   this is what makes $RS_{ij}$ unit-specific
@@ -166,10 +170,10 @@ $x_{ik}$, even though they share the same estimated coefficients.
 For cross-section data, one OLS regression is estimated per focal
 predictor $j$:
 
-$$y_i = \gamma_0
+$$y_i = \beta_j
       + \sum_{k \neq j} \gamma_k \cdot x_{ik}
-      + \delta_0 \cdot x_{ij}
-      + \sum_{k \neq j} \delta_k \cdot (x_{ij} \cdot x_{ik})
+      + \beta_0 \cdot x_{ij}
+      + \sum_{k \neq j} \beta_k \cdot (x_{ij} \cdot x_{ik})
       + z_i' \zeta
       + \eta_i$$
 
@@ -179,7 +183,7 @@ variance). Standard errors are computed with HC3 robust covariance.
 
 After estimation:
 
-$$RS_{ij} = \hat{\delta}_0 + \sum_{k \neq j} \hat{\delta}_k \cdot x_{ik}$$
+$$RS_{ij} = \hat{\beta}_j + \sum_{k \neq j} \hat{\beta}_k \cdot x_{ik}$$
 
 There are **p separate regressions** — one per focal predictor — each with
 the same $y$ but a different interaction structure. Each regression has its
@@ -194,8 +198,8 @@ heterogeneity can be absorbed via fixed effects:
 
 $$y_{it} = \gamma_0
          + \sum_{k \neq j} \gamma_k \cdot x_{ikt}
-         + \delta_0 \cdot x_{ijt}
-         + \sum_{k \neq j} \delta_k \cdot (x_{ijt} \cdot x_{ikt})
+         + \beta_0 \cdot x_{ijt}
+         + \sum_{k \neq j} \beta_k \cdot (x_{ijt} \cdot x_{ikt})
          + \alpha_i + \eta_{it}$$
 
 The within-transformation (demeaning by unit) eliminates $\alpha_i$.
@@ -219,12 +223,12 @@ explicitly — and the package does so.
 
 ### Scores use original values
 
-After estimating $\delta$ on the demeaned data, the scores are computed on
+After estimating $\beta$ on the demeaned data, the scores are computed on
 the **original standardised values**, not the demeaned ones:
 
-$$RS_{ijt} = \hat{\delta}_0 + \sum_{k \neq j} \hat{\delta}_k \cdot x_{ikt}$$
+$$RS_{ijt} = \hat{\beta}_0 + \sum_{k \neq j} \hat{\beta}_k \cdot x_{ikt}$$
 
-The demeaning is only a device to identify the $\delta$ coefficients without
+The demeaning is only a device to identify the $\beta$ coefficients without
 bias from unit fixed effects. The scores measure each unit's responsiveness
 in its absolute context.
 
@@ -275,9 +279,9 @@ different from zero, we need confidence intervals.
 1. Resample the data (iid bootstrap for cross-section, cluster bootstrap
    by unit for panel — following Cameron & Miller, 2015).
 2. Re-estimate the regression on each bootstrap sample to get new
-   $\hat{\delta}^{(b)}$ coefficients.
+   $\hat{\beta}^{(b)}$ coefficients.
 3. Compute scores on the **original** covariate values using
-   $\hat{\delta}^{(b)}$: this propagates parametric uncertainty while
+   $\hat{\beta}^{(b)}$: this propagates parametric uncertainty while
    holding the "context" of each unit fixed.
 4. Repeat B times. The distribution of $RS_{ij}^{(b)}$ across bootstrap
    replications yields confidence intervals and p-values for each unit.
@@ -295,7 +299,7 @@ different from zero, we need confidence intervals.
 
 ### What the bootstrap does NOT capture
 
-The bootstrap propagates uncertainty in $\delta$ (the interaction
+The bootstrap propagates uncertainty in $\beta$ (the interaction
 coefficients) to the scores. It does **not** account for:
 
 - Sampling variability of the covariates $x_{ik}$ themselves
@@ -312,11 +316,11 @@ the slope *at that point*.
 Before looking at individual scores, a joint hypothesis test determines
 whether there is any detectable heterogeneity at all:
 
-$$H_0: \delta_1 = \delta_2 = \ldots = \delta_{p-1} = 0
+$$H_0: \beta_1 = \beta_2 = \ldots = \beta_{p-1} = 0
 \quad \text{(all interaction coefficients are zero)}$$
-$$H_1: \text{at least one } \delta_k \neq 0$$
+$$H_1: \text{at least one } \beta_k \neq 0$$
 
-If $H_0$ is not rejected, all scores collapse to $\delta_0$ plus noise —
+If $H_0$ is not rejected, all scores collapse to $\beta_0$ plus noise —
 there is no evidence of heterogeneous slopes, and unit-level scores carry
 no reliable signal.
 
@@ -340,7 +344,7 @@ with a single slope may be sufficient.
 
 **Wald does not reject + visible spatial variation in RS maps** — the
 observed variation reflects noise propagated from non-significant
-$\delta_k$, not genuine heterogeneity. The map carries no interpretable
+$\beta_k$, not genuine heterogeneity. The map carries no interpretable
 signal for that predictor.
 
 ---
@@ -464,7 +468,7 @@ This choice should be theory-driven, not p-value-driven.
 
 **When should I remove a non-significant interaction term?**
 
-If the Wald test rejects but individual $\delta_k$ are non-significant,
+If the Wald test rejects but individual $\beta_k$ are non-significant,
 do not automatically drop them. Moving a variable from predictors to
 controls changes the entire interaction structure. Justify any such
 change with domain knowledge, not statistical fishing.
