@@ -124,9 +124,9 @@ model.plot_timeseries(predictor="precip",
 The recommended reading order for results is:
 
 1. **R²** — does the model fit the data?
-2. **δ₀** (baseline slope) — what is the average effect of predictor j?
+2. **${\beta_0}$** (baseline slope) — what is the average effect of predictor j?
 3. **Wald test** — the gate: are interaction terms jointly significant?
-   If not, scores collapse to δ₀; stop here for that predictor.
+   If not, scores collapse to ${\beta_0}$; stop here for that predictor.
 4. **Interaction coefficients** — *which* other predictors modulate the
    slope? This is the mechanism behind heterogeneity.
 5. **Bootstrap CIs** — which individual units have scores statistically
