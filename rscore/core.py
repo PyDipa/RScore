@@ -673,7 +673,10 @@ class RScore:
                    X_cat: Optional[pd.DataFrame]) -> Tuple[pd.DataFrame, List[str]]:
         """Embed dummy columns into df with a unique prefix.
         Return augmented DataFrame with dummy columns"""
-        if X_cat is None:
+        # if X_cat is None:
+        #     return df.reset_index(drop=True).copy(), []
+
+        if X_cat is None or not isinstance(X_cat, pd.DataFrame):
             return df.reset_index(drop=True).copy(), []
         cat_cols = [f"{_CAT_PREFIX}{c}" for c in X_cat.columns]
         X_cat_r = X_cat.rename(

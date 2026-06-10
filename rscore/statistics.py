@@ -626,43 +626,39 @@ def standardize_data(data,analysis_result,groups=None,plot = True):
 
     # ── Internal PIT engine ────────────────────────────────────────────────
     def _pit(dataset_clean: np.ndarray, dist: str, params: dict) -> np.ndarray:
-        """
-        Probability Integral Transform for one (dist, params) pair.
-        Returns CDF values ∈ (cdf_clip, 1-cdf_clip).
-        """
         x = dataset_clean
+        qq = np.sum(x == 0) / len(x)  # zero-inflation factor
 
         if dist == "gaussian":
             p = stats.norm.cdf(x, loc=params["mu"], scale=params["sigma"])
 
         elif dist == "gamma":
             shift = 1.0 if params["shift_applied"] else 0.0
-            p = stats.gamma.cdf(
+            Gx = stats.gamma.cdf(
                 x + shift, params["shape"],
                 loc=params["loc"], scale=params["scale"],
             )
+            p = qq + (1 - qq) * Gx
 
         elif dist == "pearson3":
-            p = stats.pearson3.cdf(
+            Gx = stats.pearson3.cdf(
                 x, params["shape"],
                 loc=params["loc"], scale=params["scale"],
             )
+            p = qq + (1 - qq) * Gx
 
         elif dist == "kde":
-            # Rebuild the CDF from scratch (kde_object not guaranteed serialisable)
             kde = stats.gaussian_kde(dataset_clean, bw_method="silverman")
-            std  = np.std(dataset_clean)
-            bw   = kde.predictor * std
+            std = np.std(dataset_clean)
+            bw = kde.factor * std
             x_min = dataset_clean.min() - 4 * bw
             x_max = dataset_clean.max() + 4 * bw
-            grid     = np.linspace(x_min, x_max, 4096)
+            grid = np.linspace(x_min, x_max, 4096)
             pdf_grid = kde.evaluate(grid)
             cdf_grid = np.cumsum(pdf_grid) * (grid[1] - grid[0])
             cdf_grid /= cdf_grid[-1]
-            p = np.interp(x, grid, cdf_grid)
-
-        else:
-            raise ValueError(f"Unknown distribution: '{dist}'")
+            Gx = np.interp(x, grid, cdf_grid)
+            p = qq + (1 - qq) * Gx
 
         return np.clip(p, cdf_clip, 1.0 - cdf_clip)
 
