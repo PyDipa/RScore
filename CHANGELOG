@@ -1,6 +1,0 @@
-### Fixed
-- `standardize_data._pit`: added zero-inflation correction (SPI convention)
-  for `gamma`, `pearson3`, and `kde` distributions. CDF is now computed as
-  `H(x) = q0 + (1 - q0) * F(x)` before the normal-quantile transform,
-  consistent with McKee (1993) and Vicente-Serrano (2010).
-- Fixed invalid attribute `kde.predictor` → `kde.factor` in KDE branch of `_pit`.
