@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rscore"
-version = "0.1.1"
+version = "0.1.2"
 description = "Responsiveness Scores: unit-level heterogeneous slope estimation via iterated random-coefficient regression."
 readme = "README.md"
 license = {text = "MIT"}
