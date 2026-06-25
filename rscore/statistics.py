@@ -26,7 +26,7 @@ _ALL_DISTS = ("gaussian", "gamma", "pearson3", "kde")
 
 # helpers
 # PRIVATE CORE FITTER  (single distribution, single clean array)
-def _fit_single_dist(dataset,dist=None,shift_for_gamma = True):
+def _fit_single_dist(dataset,dist=None):
     """
     Fit *one* distribution to a clean (finite, 1-D) array and return stats.
 
@@ -35,8 +35,6 @@ def _fit_single_dist(dataset,dist=None,shift_for_gamma = True):
     dataset : np.ndarray
         Finite-only values (caller must filter).
     dist : {"gaussian", "gamma", "pearson3", "kde"}
-    shift_for_gamma : bool
-        If True, apply dataset + 1 before Gamma fitting to avoid zeros.
 
     Returns
     -------
@@ -44,10 +42,6 @@ def _fit_single_dist(dataset,dist=None,shift_for_gamma = True):
         distribution, params, KS_statistic, KS_p_value, log_likelihood,
         AIC, k_params, error_percent, goodness_percent.
 
-    Raises
-    ------
-    ValueError
-        If Gamma is requested on non-positive data with shift_for_gamma=False.
     """
     if dist is None:
         dist = 'gaussian'
@@ -55,19 +49,22 @@ def _fit_single_dist(dataset,dist=None,shift_for_gamma = True):
 
     # ── Gamma ──────────────────────────────────────────────────────────────
     if dist == "gamma":
-        data_used = dataset + 1.0 if shift_for_gamma else dataset
-        if np.any(data_used <= 0):
-            raise ValueError(
-                "Gamma distribution requires strictly positive values. "
-                "Set shift_for_gamma=True or pre-process the data."
-            )
+        # SPI-canonical: fit solo su positivi, nessuno shift
+        pos_mask = dataset > 0
+        if not np.any(pos_mask):
+            raise ValueError("Gamma fit: nessun valore positivo.")
+        data_used = dataset[pos_mask]  # ← solo positivi
         shape, loc, scale = stats.gamma.fit(data_used, floc=0)
-        D, p_ks = stats.kstest(data_used, "gamma", args=(shape, loc, scale))
-        logpdf = stats.gamma.logpdf(data_used, shape, loc=loc, scale=scale)
-        params = {"shape": shape, "loc": loc, "scale": scale,
-                  "shift_applied": shift_for_gamma}
-        k = 3
+        # Rivaluta KS sull'intero dataset tramite zero-inflation CDF
+        qq = np.sum(dataset == 0) / len(dataset)
 
+        def _zinfl_cdf(x):
+            return qq + (1 - qq) * stats.gamma.cdf(x, shape, loc=loc, scale=scale)
+
+        D, p_ks = stats.kstest(dataset[pos_mask], "gamma", args=(shape, loc, scale))
+        logpdf = stats.gamma.logpdf(data_used, shape, loc=loc, scale=scale)
+        params = {"shape": shape, "loc": loc, "scale": scale, "qq": float(qq)}
+        k = 3
     # ── Pearson type III ───────────────────────────────────────────────────
     elif dist == "pearson3":
         data_used = dataset
@@ -96,7 +93,8 @@ def _fit_single_dist(dataset,dist=None,shift_for_gamma = True):
 
         # Vectorised CDF via trapezoidal integration on a fine grid
         std   = np.std(data_used)
-        bw    = kde.predictor * std
+        # bw    = kde.predictor * std
+        bw = kde.factor * std
         x_min = data_used.min() - 4 * bw
         x_max = data_used.max() + 4 * bw
         x_grid   = np.linspace(x_min, x_max, 4096)
@@ -116,7 +114,7 @@ def _fit_single_dist(dataset,dist=None,shift_for_gamma = True):
         # Store only serialisable primitives; expose CDF callable separately
         params = {
             "bw_method":  "silverman",
-            "bw_predictor":  float(kde.predictor),
+            "bw_factor": float(kde.factor),
             "n_fit":      int(len(data_used)),
             "_kde_cdf":   kde_cdf,      # callable, not JSON-serialisable
         }
@@ -208,7 +206,7 @@ def _bootstrap_ks_pvalue(dataset:np.ndarray,fit_result: dict,
     return float(np.mean(valid >= D_obs))
 
 # Fit all four families to `dataset` and return a comparison dict.
-def _analyze_all(dataset, shift_for_gamma = True,  n_bootstrap=0,seed=None):
+def _analyze_all(dataset,  n_bootstrap=0,seed=None):
     """
     Fit all four families to `dataset` and return a comparison dict.
 
@@ -226,7 +224,7 @@ def _analyze_all(dataset, shift_for_gamma = True,  n_bootstrap=0,seed=None):
     rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
     for d in _ALL_DISTS:
         try:
-            res = _fit_single_dist(dataset, d, shift_for_gamma=shift_for_gamma)
+            res = _fit_single_dist(dataset, d)
             if n_bootstrap > 0:
                 res["KS_p_value_bootstrap"] = _bootstrap_ks_pvalue(
                     dataset, res, n_bootstrap=n_bootstrap, rng=rng
@@ -306,13 +304,13 @@ def _plot_cdf_comparison(dataset,analysis,title = ""):
             cdf = stats.norm.cdf(x_plot, loc=params["mu"], scale=params["sigma"])
             pdf = stats.norm.pdf(x_plot, loc=params["mu"], scale=params["sigma"])
         elif d == "gamma":
-            shift = 1.0 if params["shift_applied"] else 0.0
+
             cdf = stats.gamma.cdf(
-                x_plot + shift, params["shape"],
+                x_plot, params["shape"],
                 loc=params["loc"], scale=params["scale"]
             )
             pdf = stats.gamma.pdf(
-                x_plot + shift, params["shape"],
+                x_plot, params["shape"],
                 loc=params["loc"], scale=params["scale"]
             )
         elif d == "pearson3":
@@ -336,6 +334,8 @@ def _plot_cdf_comparison(dataset,analysis,title = ""):
                 lw=1.5, alpha=0.8, label="Empirical CDF")
     ax_pdf.hist(dataset, bins="auto", density=True,
                 color="black", alpha=0.2, label="Empirical density")
+    counts, edges = np.histogram(dataset, bins="auto", density=True)
+    ax_pdf.set_ylim(0, counts.max() * 1.15)  # 15% buffer
 
     for ax, ylabel, ttl in zip(
         [ax_cdf, ax_pdf],
@@ -354,7 +354,7 @@ def _plot_cdf_comparison(dataset,analysis,title = ""):
 
 # PUBLIC API
 
-def test_standardization(data, groups=None, shift_for_gamma = True,
+def test_standardization(data, groups=None,
     plot = True, n_bootstrap = 0, seed = None):
     """
     Fit all four distribution families and recommend the best one.
@@ -374,8 +374,7 @@ def test_standardization(data, groups=None, shift_for_gamma = True,
     groups : array-like or None
         Optional grouping vector (same length as `data`). Analysis is run
         independently per group.
-    shift_for_gamma : bool, default True
-        Add 1 to data before Gamma fitting to handle zeros.
+
     plot : bool, default True
         Generate empirical vs theoretical CDF/PDF comparison figures.
     n_bootstrap : int, default 0
@@ -403,7 +402,7 @@ def test_standardization(data, groups=None, shift_for_gamma = True,
 
 
     if groups is None:
-        result = _analyze_all(data, shift_for_gamma, n_bootstrap)
+        result = _analyze_all(data, n_bootstrap)
         if plot:
             fig = _plot_cdf_comparison(data, result)
             plt.show()
@@ -416,7 +415,7 @@ def test_standardization(data, groups=None, shift_for_gamma = True,
     results = {}
     for g in np.unique(groups):
         subset = data[groups == g]
-        res    = _analyze_all(subset, shift_for_gamma, n_bootstrap)
+        res    = _analyze_all(subset, n_bootstrap)
         if plot:
             fig = _plot_cdf_comparison(subset, res, title=str(g))
             plt.show()
@@ -622,7 +621,7 @@ def standardize_data(data,analysis_result,groups=None,plot = True):
 
     data   = np.asarray(data, dtype=float)
     valid_mask = np.isfinite(data)
-    cdf_clip = 1e-6
+    cdf_clip = 3.17e-5  # ≡ Φ(−4)
 
     # ── Internal PIT engine ────────────────────────────────────────────────
     def _pit(dataset_clean: np.ndarray, dist: str, params: dict) -> np.ndarray:
@@ -633,9 +632,9 @@ def standardize_data(data,analysis_result,groups=None,plot = True):
             p = stats.norm.cdf(x, loc=params["mu"], scale=params["sigma"])
 
         elif dist == "gamma":
-            shift = 1.0 if params["shift_applied"] else 0.0
+            qq = params["qq"]   # already estimated on the whole dataset in _fit_single_dist
             Gx = stats.gamma.cdf(
-                x + shift, params["shape"],
+                x, params["shape"],
                 loc=params["loc"], scale=params["scale"],
             )
             p = qq + (1 - qq) * Gx
